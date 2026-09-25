@@ -97,6 +97,7 @@ class AuthController extends Controller
         }
     }
 
+
     public function login(Request $request)
     {
         $datos = $request->validate([
@@ -109,30 +110,32 @@ class AuthController extends Controller
             strtoupper($datos['usuario'])
         )->first();
 
-        if (!$usuario || !Hash::check($datos['password'], $usuario->password)) {
-            throw ValidationException::withMessages([
-                'usuario' => ['Las credenciales son incorrectas.'],
-            ]);
+        if (
+            !$usuario ||
+            !Hash::check($datos['password'], $usuario->password)
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Las credenciales son incorrectas.'
+            ], 401);
         }
 
         if ($usuario->estado !== 'Activo') {
             return response()->json([
-                'message' => 'El usuario se encuentra inactivo.',
+                'success' => false,
+                'message' => 'El usuario se encuentra inactivo.'
             ], 403);
         }
-
-        // Revoca tokens anteriores si quieres permitir
-        // solamente una sesión activa.
-        // $usuario->tokens()->delete();
 
         $token = $usuario->createToken('auth_token')->plainTextToken;
 
         return response()->json([
+            'success' => true,
             'message' => 'Inicio de sesión exitoso',
             'usuario' => $usuario,
             'token' => $token,
-            'token_type' => 'Bearer',
-        ]);
+            'token_type' => 'Bearer'
+        ], 200);
     }
 
     public function me(Request $request)
