@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ColoresController;
 use App\Http\Controllers\Api\MarcasController;
 use App\Http\Controllers\Api\ModelosController;
 use App\Http\Controllers\Api\ArticulosController;
+use App\Http\Controllers\Api\SolicitudController;
 Route::post('/registrar_usuario', [AuthController::class, 'registrar']);
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -30,6 +31,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('modelos', ModelosController::class);
     //Articulos
     Route::apiResource('articulos', ArticulosController::class);
+    //Solicitudes
+    Route::apiResource('solicitud', SolicitudController::class);
+    Route::get('/solicitudes/{id}', [SolicitudController::class,'show']);
+    Route::delete('/eliminar_articulo/{id}', [SolicitudController::class,'destroy']);
+    Route::post('/agregar_articulo_detalle/{id}/solicitud',[SolicitudController::class,'agregarArticulo']);
 
 
 });

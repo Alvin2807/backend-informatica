@@ -7,7 +7,7 @@ use App\Models\Articulos;
 use Illuminate\Http\Request;
 use App\Http\Requests\Articulos\RequestRegistrar;
 use Illuminate\Support\Facades\DB;
-
+use App\Models\VistaArticulos;
 class ArticulosController extends Controller
 {
     /**
@@ -15,7 +15,11 @@ class ArticulosController extends Controller
      */
     public function index()
     {
-        //
+        $articulo = VistaArticulos::all();
+        return response()->json([
+            'ok'=>true,
+            'data'=>$articulo
+        ]);
     }
 
     /**
