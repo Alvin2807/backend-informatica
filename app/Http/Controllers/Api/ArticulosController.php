@@ -25,9 +25,15 @@ class ArticulosController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function articulosStock()
     {
-        //
+        $articulos = VistaArticulos::select('id_articulo','categoria','marca','modelo','color','codigo','modelo_insumo','stock','detalle')
+        ->where('stock','>',0)
+        ->get();
+        return response()->json([
+            'ok'=>true,
+            'data'=>$articulos
+        ]);
     }
 
     /**
