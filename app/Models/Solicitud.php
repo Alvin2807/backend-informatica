@@ -31,6 +31,11 @@ class Solicitud extends Model
         'estado'
     ];
 
+    protected $casts =
+     [
+        'fecha_solicitud'=>'date:Y-m-d'
+    ];
+
     public function detalles()
     {
         return $this->hasMany(
@@ -38,11 +43,7 @@ class Solicitud extends Model
             'fk_solicitud',
             'id_solicitud'
         );
-        /* return $this->hasMany(
-            Detalle::class,
-            'fk_solicitud',
-            'id_solicitud'
-        ); */
+
     }
 
 }

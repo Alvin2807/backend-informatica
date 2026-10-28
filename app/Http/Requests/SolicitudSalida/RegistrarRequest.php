@@ -28,7 +28,7 @@ class RegistrarRequest extends FormRequest
             'fk_nomenclatura'=>'required|integer|exists:inv_nomenclaturas,id_nomenclatura',
             'entregado_por'=>'required|string|max:100',
             'recibido_por'=>'nullable|string',
-            'incidencia'=>'required|integer|unique',
+            'incidencia'=>'required|integer',
             'fecha_solicitud'=>'required|date',
             'detalles'=>[
                 'required',

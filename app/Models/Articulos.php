@@ -4,31 +4,33 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+
 class Articulos extends Model
 {
     protected $table = 'inv_articulos';
-    protected $primarykey = 'id_articulo';
-    protected $fillable =
-    [
+
+    protected $primaryKey = 'id_articulo';
+
+    protected $keyType = 'int';
+
+    public $incrementing = true;
+
+    public $timestamps = false;
+
+    protected $fillable = [
         'fk_categoria',
+        'fk_color',
+        'fk_modelo',
+        'fk_marca',
         'codigo',
         'modelo_insumo',
-        'fk_categoria',
-        'fk_marca',
-        'fk_modelo',
-        'fk_color',
         'detalle',
         'stock',
         'usuario_crea',
         'fecha_crea',
-        'usuario_crea',
         'usuario_modifica',
         'fecha_modifica'
     ];
-
-    protected $keyType = 'int';
-    public $incrementig = true;
-    public $timestamps = false;
 
     protected $casts = [
         'fk_marca'=>'integer',

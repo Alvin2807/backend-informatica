@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use App\Http\Requests\Articulos\RequestRegistrar;
 use Illuminate\Support\Facades\DB;
 use App\Models\VistaArticulos;
+use App\Models\Movimiento;
+
 class ArticulosController extends Controller
 {
     /**

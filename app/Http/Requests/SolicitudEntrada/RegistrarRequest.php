@@ -28,7 +28,7 @@ class RegistrarRequest extends FormRequest
             'num_solicitud'=>'required|string|max:100|unique:inv_solicitud,num_solicitud',
             'entregado_por'=>'required|string|max:100',
             'recibido_por'=>'required|string|max:100',
-            'fecha_solicitud'=>'required|date',
+            'fecha_solicitud'=>'required|date_format:Y-m-d',
             'detalles'=>[
                 'required',
                 'array',
@@ -40,9 +40,11 @@ class RegistrarRequest extends FormRequest
 
     }
 
-    public function messages():array{
+    public function messages(): array
+    {
         return [
-            'num_solicitud.unique'=>'El número de solicitud ya existe'
+            'num_solicitud.unique'=>'El número de solicitud ya existe',
+            'fk_despaho.required'=>'El despacho es obligatorio'
         ];
     }
 }

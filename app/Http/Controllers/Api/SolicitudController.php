@@ -14,6 +14,11 @@ use App\Http\Requests\Solicitud\RegistrarDetalleRequest;
 use App\Http\Requests\SolicitudEntrada\EditarDetalleRequest;
 use App\Http\Requests\SolicitudEntrada\EditarSolicitudRequest;
 use App\Models\Articulos;
+use App\Models\Despacho;
+use Carbon\Carbon;
+use App\Models\Movimiento;
+use Illuminate\Support\Facades\Validator;
+use App\Http\Requests\SolicitudEntrada\ConfirmarRequest;
 class SolicitudController extends Controller
 {
     /**
@@ -41,6 +46,14 @@ class SolicitudController extends Controller
     public function create()
     {
         //
+    }
+
+    public function obTnerDatos()
+    {
+        $year = Carbon::now()->year;
+        return response()->json([
+            'data'=>$year
+        ]);
     }
 
     /**
@@ -309,8 +322,6 @@ class SolicitudController extends Controller
             $detalle->usuario_modifica =
                 strtoupper(trim($usuario->usuario));
 
-            $detalle->fecha_modifica =
-                now();
 
             $detalle->save();
 
@@ -793,441 +804,204 @@ class SolicitudController extends Controller
         }
     }
 
-   public function confirmarSolicitud(Request $request, $id)
+    public function confirmarSolicitud(ConfirmarRequest $request, $id)
     {
         try {
-
-            DB::beginTransaction();
-
-            /*
-            |--------------------------------------------------------------------------
-            | USUARIO
-            |--------------------------------------------------------------------------
-            */
 
             $usuario = $request->user();
 
             if (!$usuario) {
-
-                DB::rollBack();
-
                 return response()->json([
-                    'ok' => false,
-                    'message' => 'Usuario no autenticado.'
-                ], 401);
+                    'ok'=>false,
+                    'mensaje'=>'El usuario no está autenticado'
+                ],401);
+
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | VALIDAR REQUEST
-            |--------------------------------------------------------------------------
-            */
+            $items = $request->input('detalles', []);
 
-            $datos = $request->validate([
+            if (!is_array($items) || count($items) === 0) {
+                return response()->json([
+                    'ok'=>false,
+                    'mensaje'=>'Faltan los detalles de la solicitud'
+                ],422);
+            }
 
-                'detalles' => [
-                    'required',
-                    'array',
-                    'min:1'
-                ],
+            DB::beginTransaction();
 
-                'detalles.*.id_detalle' => [
-                    'required',
-                    'integer'
-                ],
-
-                'detalles.*.cantidad_despachada' => [
-                    'required',
-                    'integer',
-                    'min:1'
-                ],
-
-            ], [
-
-                'detalles.required' =>
-                    'Debe enviar los detalles de la solicitud.',
-
-                'detalles.array' =>
-                    'El campo detalles debe ser un arreglo.',
-
-                'detalles.min' =>
-                    'Debe enviar por lo menos un detalle.',
-
-                'detalles.*.id_detalle.required' =>
-                    'El id del detalle es obligatorio.',
-
-                'detalles.*.cantidad_despachada.required' =>
-                    'La cantidad despachada es obligatoria.',
-
-                'detalles.*.cantidad_despachada.min' =>
-                    'La cantidad despachada debe ser mayor que cero.'
-
-            ]);
-
-            /*
-            |--------------------------------------------------------------------------
-            | BUSCAR SOLICITUD
-            |--------------------------------------------------------------------------
-            */
-
-            $solicitud = Solicitud::where(
-                'id_solicitud',
-                $id
-            )
-            ->where(
-                'estado',
-                'Pendiente'
-            )
+            $solicitud = Solicitud::
+            where('id_solicitud', $id)
+            ->where('estado','Pendiente')
             ->lockForUpdate()
             ->first();
 
             if (!$solicitud) {
-
-                DB::rollBack();
-
+                DB::rollback();
                 return response()->json([
-                    'ok' => false,
-                    'message' =>
-                        'La solicitud no existe o no está pendiente.'
-                ], 404);
+                    'ok'=>false,
+                    'mensaje'=>'La solicitud no existe o no está pendiente'
+
+                ],404);
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | PROCESAR DETALLES
-            |--------------------------------------------------------------------------
-            */
+            $actualizados = 0;
 
-            foreach ($datos['detalles'] as $item) {
+            for ($i=0; $i <count($items) ; $i++) {
+                if (!isset($items[$i]['id_detalle'])) {
+                    throw new \RuntimeException(
+                        'Falta el id_detalle en el elemento ' . $i
+                    );
+                }
 
-                /*
-                |--------------------------------------------------------------------------
-                | BUSCAR DETALLE
-                |--------------------------------------------------------------------------
-                */
-
-                $detalle = Detalle::where(
-                    'id_detalle',
-                    $item['id_detalle']
-                )
-                ->where(
-                    'fk_solicitud',
-                    $solicitud->id_solicitud
-                )
-                ->lockForUpdate()
-                ->first();
+                $detalle = Detalle::
+                    where('id_detalle', $items[$i]['id_detalle'])
+                    ->where('fk_solicitud', $id)
+                    ->lockForUpdate()
+                    ->first();
 
                 if (!$detalle) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'ok' => false,
-                        'message' =>
-                            'El detalle '
-                            . $item['id_detalle']
-                            . ' no pertenece a esta solicitud.'
-                    ], 404);
+                    throw new \RuntimeException(
+                        'No se encontró el detalle ' .
+                        $items[$i]['id_detalle']
+                    );
                 }
 
-                /*
-                |--------------------------------------------------------------------------
-                | CANTIDADES
-                |--------------------------------------------------------------------------
-                */
+                $cantidadDespachada = (int) $detalle->despachada;
 
-                $cantidadPendienteDetalle =
-                    (int) $detalle->cantidad_solicitada;
-
-                $cantidadDespachadaNueva =
-                    (int) $item['cantidad_despachada'];
-
-                $cantidadDespachadaAnterior =
-                    (int) ($detalle->cantidad_despachada ?? 0);
-
-                /*
-                |--------------------------------------------------------------------------
-                | VALIDAR CANTIDAD
-                |--------------------------------------------------------------------------
-                */
-
-                if ($cantidadPendienteDetalle <= 0) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'ok' => false,
-                        'message' =>
-                            'El artículo '
-                            . $detalle->fk_articulo
-                            . ' ya fue despachado completamente.'
-                    ], 400);
-                }
-
-                if (
-                    $cantidadDespachadaNueva >
-                    $cantidadPendienteDetalle
-                ) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'ok' => false,
-                        'message' =>
-                            'La cantidad despachada del artículo '
-                            . $detalle->fk_articulo
-                            . ' no puede ser mayor que la cantidad pendiente.'
-                    ], 400);
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | BUSCAR ARTÍCULO
-                |--------------------------------------------------------------------------
-                */
-
-                $articulo = Articulos::where(
-                    'id_articulo',
-                    $detalle->fk_articulo
-                )
-                ->lockForUpdate()
-                ->first();
-
-                if (!$articulo) {
-
-                    DB::rollBack();
-
-                    return response()->json([
-                        'ok' => false,
-                        'message' =>
-                            'El artículo '
-                            . $detalle->fk_articulo
-                            . ' no existe.'
-                    ], 404);
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | AUMENTAR STOCK
-                |--------------------------------------------------------------------------
-                */
-
-                $nuevoStock =
-                    (int) $articulo->stock
-                    + $cantidadDespachadaNueva;
-
-                Articulos::where(
-                    'id_articulo',
-                    $detalle->fk_articulo
-                )->update([
-
-                    'stock' =>
-                        $nuevoStock,
-
-                    'usuario_modifica' =>
-                        strtoupper(trim($usuario->usuario)),
-
-                    'fecha_modifica' =>
-                        now()
-
+                DB::table('inv_detalle')
+                ->where('id_detalle', $items[$i]['id_detalle'])
+                ->where('fk_solicitud', $id)
+                ->update([
+                    'cantidad_despachada' => $items[$i]['cantidad_solicitada'] + $cantidadDespachada
                 ]);
 
+                $actualizados ++;
+
+                $consultaDetalle = Detalle::
+                select('id_detalle','cantidad_despachada','cantidad_solicitada')
+                ->where('id_detalle', $items[$i]['id_detalle'])
+                ->where('fk_solicitud', $id)
+                ->get();
+
+                if ($consultaDetalle[0]['cantidad_solicitada'] === $consultaDetalle[0]['cantidad_despachada']) {
+                   $DetalleAct = new Detalle();
+                   $actualizarDetalle['estado'] = 'Completado';
+                   $DetalleAct = Detalle::where('id_detalle', $consultaDetalle[0]['id_detalle'])->update($actualizarDetalle);
+
+                }
+
+                $cantidadDespachadaSolicitud = (int) $solicitud->cantidad_despachada;
+
+                $totalCantidadDespachadaDetalle = Detalle::
+                where('fk_solicitud', $id)
+                ->sum('cantidad_despachada');
+
+                $actualizarSolicitudDatos = new Solicitud();
+                $actualizarSolicitud['fk_despacho'] = $request->input('fk_despacho');
+                $actualizarSolicitud['num_solicitud'] = strtoupper($request->input('num_solicitud'));
+                $actualizarSolicitud['entregado_por'] = strtoupper($request->input('entregado_por'));
+                $actualizarSolicitud['recibido_por']  = strtoupper($request->input('recibido_por'));
+                $actualizarSolicitud['cantidad_despachada'] = $totalCantidadDespachadaDetalle;
+                $actualizarSolicitud['usuario_modifica'] = strtoupper($usuario->usuario);
+                $actualizarSolicitudDatos = Solicitud::where('id_solicitud', $id)->update($actualizarSolicitud);
+
+                $consultaSolicitud = Solicitud::
+                select('id_solicitud','cantidad_solicitada','cantidad_despachada')
+                ->where('id_solicitud', $id)
+                ->where('estado','Pendiente')
+                ->get();
+
+                if ($consultaSolicitud[0]['cantidad_solicitada'] === $consultaSolicitud[0]['cantidad_despachada']) {
+                    $actualizarSolicitudEstado = new Solicitud();
+                    $datosSolicitud['estado'] = 'Completado';
+                    $datosSolicitud['usuario_modifica'] = strtoupper($usuario->usuario);
+                    $actualizarSolicitudEstado = Solicitud::where('id_solicitud', $id)->update($datosSolicitud);
+
+                }
+
+                $articuloDetalle = Detalle::
+                select('id_detalle','fk_articulo','cantidad_solicitada','cantidad_despachada')
+                ->where('fk_articulo', $items[$i]['fk_articulo'])
+                ->where('fk_solicitud', $id)
+                ->get();
+
+                if (!$articuloDetalle) {
+
+                   return response()->json([
+                    'ok'=>false,
+                    'mensaje'=>'El artículo no existe en esta solicitud'
+                   ],404);
+                }
+
+                $consultaArticulo = Articulos::
+                select('id_articulo','stock')
+                ->where('id_articulo', $items[$i]['fk_articulo'])
+                ->get();
+
+                $actualizarArticulo = new Articulos();
+                $articulo['stock'] =  $consultaArticulo[0]['stock'] + $articuloDetalle[0]['cantidad_solicitada'];
+                $articulo['usuario_modifica'] = strtoupper($usuario->usuario);
+                $actualizarArticulo = Articulos::where('id_articulo', $consultaArticulo[0]['id_articulo'])->update($articulo);
+
                 /*
-                |--------------------------------------------------------------------------
-                | NUEVA CANTIDAD PENDIENTE DEL DETALLE
-                |--------------------------------------------------------------------------
+                    Registrar movimientos
                 */
 
-                $nuevaCantidadPendiente =
-                    $cantidadPendienteDetalle
-                    - $cantidadDespachadaNueva;
+                $fecha = now();
+                $articuloId = $detalle->fk_articulo;
+                // Obtener mes y año de fecha_solicitud
+                $fechaSolicitud = Carbon::parse($solicitud->fecha_solicitud);
+                $mes = $fechaSolicitud->month;
+                $anio = $fechaSolicitud->year;
 
-                /*
-                |--------------------------------------------------------------------------
-                | NUEVA CANTIDAD DESPACHADA ACUMULADA
-                |--------------------------------------------------------------------------
-                */
+                $cantidadEntrada = (int) $detalle->cantidad_solicitada;
 
-                $nuevaCantidadDespachada =
-                    $cantidadDespachadaAnterior
-                    + $cantidadDespachadaNueva;
+                $consultaMovimiento = Movimiento::
+                select('id_movimiento','fk_articulo','cantidad_entrada')
+                ->where('fk_articulo', $articuloId)
+                ->where('mes', $mes)
+                ->where('anio', $anio)
+                ->get();
 
-                /*
-                |--------------------------------------------------------------------------
-                | ESTADO DEL DETALLE
-                |--------------------------------------------------------------------------
-                */
-
-                if ($nuevaCantidadPendiente == 0) {
-
-                    $estadoDetalle = 'Completado';
-
+                if ($consultaMovimiento) {
+                    $actualizarMovimiento = new Movimiento();
+                    $dataMovi['cantidad_entrada'] = $cantidadEntrada + $consultaMovimiento[0]['cantidad_entrada'];
+                    $dataMovi['usuario_modifica'] = strtoupper($usuario->usuario);
+                    $actualizarMovimiento = Movimiento::where('id_movimiento', $consultaMovimiento[0]['id_movimiento'])->update($dataMovi);
                 } else {
 
-                    $estadoDetalle = 'Pendiente';
+                    $movimiento = new Movimiento();
+                    $movimiento->fk_articulo = $articuloId;
+                    $movimiento->mes = $mes;
+                    $movimiento->anio = $anio;
+                    $movimiento->cantidad_entrada = $cantidadEntrada;
+                    $movimiento->usuario_crea = strtoupper($usuario->usuario);
+                    $movimiento->save();
                 }
 
-                /*
-                |--------------------------------------------------------------------------
-                | ACTUALIZAR DETALLE
-                |--------------------------------------------------------------------------
-                */
 
-                Detalle::where(
-                    'id_detalle',
-                    $detalle->id_detalle
-                )->update([
-
-                    'cantidad_solicitada' =>
-                        $nuevaCantidadPendiente,
-
-                    'cantidad_despachada' =>
-                        $nuevaCantidadDespachada,
-
-                    'estado' =>
-                        $estadoDetalle,
-
-                    'usuario_modifica' =>
-                        strtoupper(trim($usuario->usuario)),
-
-                    'fecha_modifica' =>
-                        now()
-
-                ]);
             }
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECALCULAR TOTAL PENDIENTE
-            |--------------------------------------------------------------------------
-            */
-
-            $cantidadPendienteSolicitud =
-                Detalle::where(
-                    'fk_solicitud',
-                    $solicitud->id_solicitud
-                )->sum('cantidad_solicitada');
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECALCULAR TOTAL DESPACHADO
-            |--------------------------------------------------------------------------
-            */
-
-            $cantidadDespachadaSolicitud =
-                Detalle::where(
-                    'fk_solicitud',
-                    $solicitud->id_solicitud
-                )->sum('cantidad_despachada');
-
-            /*
-            |--------------------------------------------------------------------------
-            | ESTADO DE LA SOLICITUD
-            |--------------------------------------------------------------------------
-            */
-
-            if ($cantidadPendienteSolicitud == 0) {
-
-                $estadoSolicitud = 'Completado';
-
-            } else {
-
-                $estadoSolicitud = 'Pendiente';
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | ACTUALIZAR SOLICITUD
-            |--------------------------------------------------------------------------
-            */
-
-            Solicitud::where(
-                'id_solicitud',
-                $solicitud->id_solicitud
-            )->update([
-
-                'cantidad_solicitada' =>
-                    $cantidadPendienteSolicitud,
-
-                'cantidad_despachada' =>
-                    $cantidadDespachadaSolicitud,
-
-                'estado' =>
-                    $estadoSolicitud,
-
-                'usuario_modifica' =>
-                    strtoupper(trim($usuario->usuario)),
-
-                'fecha_modifica' =>
-                    now()
-
-            ]);
-
-            /*
-            |--------------------------------------------------------------------------
-            | CONFIRMAR TRANSACCIÓN
-            |--------------------------------------------------------------------------
-            */
 
             DB::commit();
 
-            /*
-            |--------------------------------------------------------------------------
-            | RECARGAR SOLICITUD
-            |--------------------------------------------------------------------------
-            */
-
-            $solicitudActualizada = Solicitud::where(
-                'id_solicitud',
-                $solicitud->id_solicitud
-            )->first();
-
-            /*
-            |--------------------------------------------------------------------------
-            | RESPUESTA
-            |--------------------------------------------------------------------------
-            */
-
             return response()->json([
+                'ok'=>true,
+                'data'=>$solicitud,
+                'mensaje'=>'Se confirmó la solicitud',
+                'detalleActualizados'=> $actualizados
+            ],200);
 
-                'ok' => true,
-
-                'message' =>
-                    'Solicitud confirmada correctamente.',
-
-                'data' => [
-
-                    'id_solicitud' =>
-                        $solicitudActualizada->id_solicitud,
-
-                    'cantidad_solicitada' =>
-                        $solicitudActualizada->cantidad_solicitada,
-
-                    'cantidad_despachada' =>
-                        $solicitudActualizada->cantidad_despachada,
-
-                    'estado' =>
-                        $solicitudActualizada->estado
-
-                ]
-
-            ], 200);
 
         } catch (\Exception $th) {
-
-            DB::rollBack();
-
+            DB::rollback();
             return response()->json([
-
-                'ok' => false,
-
-                'message' =>
-                    'No se pudo confirmar la solicitud.',
-
-                'error' =>
-                    $th->getMessage()
-
-            ], 500);
+                'ok'=>false,
+                'mensaje'=>'No se pudo confirmar la solicitud',
+                'error'=>$th->getMessage()
+            ],500);
         }
     }
+
+
+
 }

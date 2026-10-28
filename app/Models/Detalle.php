@@ -6,11 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class Detalle extends Model
 {
-    protected $table      = 'inv_detalle';
+    protected $table = 'inv_detalle';
     protected $primaryKey = 'id_detalle';
+    public $timestamps = false;
     protected $keyType = 'int';
     public $incrementing = true;
-    public $timestamps = false;
 
     protected $fillable = [
         'id_detalle',
