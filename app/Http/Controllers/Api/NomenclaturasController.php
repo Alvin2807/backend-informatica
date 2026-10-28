@@ -7,6 +7,7 @@ use App\Models\Nomenclatura;
 use Illuminate\Http\Request;
 use App\Models\Despacho;
 use App\Models\VistaArticulos;
+use App\Models\VistaNomenclatura;
 
 class NomenclaturasController extends Controller
 {
@@ -15,7 +16,12 @@ class NomenclaturasController extends Controller
      */
     public function index()
     {
-        //
+        $nomenclatura = VistaNomenclatura::all();
+        return response()->json([
+            'ok'=>true,
+            'data'=>$nomenclatura
+
+        ],200);
     }
 
     /**

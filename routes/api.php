@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\SolicitudController;
 use App\Http\Controllers\Api\NomenclaturasController;
 use App\Http\Controllers\Api\DespachoController;
 use App\Http\Controllers\Api\SalidaController;
+use App\Http\Controllers\Api\MovimientoController;
 
 
 Route::post('/registrar_usuario', [AuthController::class, 'registrar']);
@@ -40,6 +41,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('solicitud_salida', SalidaController::class);
     Route::apiResource('solicitud', SolicitudController::class);
     Route::apiResource('despachos', DespachoController::class);
+    Route::apiResource('nomenclaturas', NomenclaturasController::class);
+    Route::apiResource('movimientos', MovimientoController::class);
     Route::get('/solicitudes/{id}', [SolicitudController::class,'show']);
     Route::delete('/eliminar_articulo/{id}', [SolicitudController::class,'destroy']);
     Route::post('/agregar_articulo_detalle/{id}/solicitud',[SolicitudController::class,'agregarArticulo']);
